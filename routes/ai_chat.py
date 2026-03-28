@@ -1,18 +1,23 @@
 from fastapi import APIRouter
 from database import appointments, patients
-from utils.slot_checker import is_slot_available
+from utils.slot_manager import is_slot_available, get_next_available_slot, get_period_slot
 from utils.date_parser import parse_date
 from utils.time_parser import parse_time
 from datetime import datetime
 
 router = APIRouter()
-
 conversation_state = {}
+
+EXIT_WORDS = ["bye", "thank you", "thanks", "ok bye", "goodbye"]
 
 @router.post("/ai-chat")
 async def ai_chat(data: dict):
-    user_message = data.get("message")
+    user_message = data.get("message").lower()
     session_id = data.get("session")
+
+    # Exit conversation
+    if any(word in user_message for word in EXIT_WORDS):
+        return {"reply": "Thank you for calling. Goodbye.", "end_call": True}
 
     if session_id not in conversation_state:
         conversation_state[session_id] = {"step": 0}
@@ -31,7 +36,7 @@ async def ai_chat(data: dict):
     elif step == 2:
         conversation_state[session_id]["phone"] = user_message
         conversation_state[session_id]["step"] = 3
-        return {"reply": "What service do you need? Cleaning, filling, whitening?"}
+        return {"reply": "What service do you need?"}
 
     elif step == 3:
         conversation_state[session_id]["service"] = user_message
@@ -42,18 +47,31 @@ async def ai_chat(data: dict):
         date = parse_date(user_message)
         conversation_state[session_id]["date"] = date
         conversation_state[session_id]["step"] = 5
-        return {"reply": "What time do you prefer?"}
+        return {"reply": "What time do you prefer? Morning, afternoon, evening or specific time?"}
 
     elif step == 5:
-        time = parse_time(user_message)
+        date = conversation_state[session_id]["date"]
+
+        # Handle morning / afternoon / evening
+        if "morning" in user_message:
+            time = get_period_slot(date, "morning")
+
+        elif "afternoon" in user_message:
+            time = get_period_slot(date, "afternoon")
+
+        elif "evening" in user_message:
+            time = get_period_slot(date, "evening")
+
+        else:
+            time = parse_time(user_message)
+
+            if not is_slot_available(date, time):
+                next_slot = get_next_available_slot(date)
+                return {"reply": f"This slot is not available. Next available slot is {next_slot}"}
 
         name = conversation_state[session_id]["name"]
         phone = conversation_state[session_id]["phone"]
         service = conversation_state[session_id]["service"]
-        date = conversation_state[session_id]["date"]
-
-        if not is_slot_available(date, time):
-            return {"reply": "This time slot is not available. Please choose another time."}
 
         patients.insert_one({
             "name": name,
@@ -72,4 +90,7 @@ async def ai_chat(data: dict):
 
         conversation_state[session_id]["step"] = 0
 
-        return {"reply": f"Your appointment is booked on {date} at {time}. Thank you."}
+        return {
+            "reply": f"Your appointment is booked on {date} at {time}. Thank you.",
+            "end_call": True
+        }
