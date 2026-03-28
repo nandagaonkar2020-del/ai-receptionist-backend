@@ -13,7 +13,7 @@ def generate_slots(session_time):
 
     elif session_time == "evening":
         start = datetime.strptime("16:30", "%H:%M")
-        end = datetime.strptime("18:00", "%H:%M")
+        end = datetime.strptime("18:30", "%H:%M")
 
     while start < end:
         slots.append(start.strftime("%I:%M %p"))
