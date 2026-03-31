@@ -2,8 +2,11 @@ from fastapi import APIRouter
 from database import appointments
 from datetime import datetime
 import re
-from slots import generate_slots
-from time_parser import normalize_time
+
+from routes.slots import generate_slots
+from utils.time_parser import normalize_time
+from utils.validator import valid_name, valid_phone, valid_service
+from utils.date_parser import parse_natural_date
 
 router = APIRouter()
 
